@@ -1,0 +1,114 @@
+title: "2.1 Bass Managed Stereo - USB Sound Card"
+description: "Linux config for the RK3399 validation board with a USB 2.1/5.1 sound card. Replace the device name with your actual sound card."
+devices:
+  samplerate: 48000
+  chunksize: 1024
+  target_level: 512
+  enable_rate_adjust: false
+  capture:
+    type: Alsa
+    device: "plughw:CARD=USB,DEV=0"
+    channels: 2
+    format: S16_LE
+  playback:
+    type: Alsa
+    device: "plughw:CARD=USB,DEV=0"
+    channels: 3
+    format: S32_LE
+filters:
+  hp_sat_left:
+    type: BiquadCombo
+    parameters:
+      type: LinkwitzRileyHighpass
+      freq: 100
+      order: 4
+  hp_sat_right:
+    type: BiquadCombo
+    parameters:
+      type: LinkwitzRileyHighpass
+      freq: 100
+      order: 4
+  lp_sub:
+    type: BiquadCombo
+    parameters:
+      type: LinkwitzRileyLowpass
+      freq: 100
+      order: 4
+  delay_left:
+    type: Delay
+    parameters:
+      delay: 0.0
+      unit: ms
+      subsample: false
+  delay_right:
+    type: Delay
+    parameters:
+      delay: 0.0
+      unit: ms
+      subsample: false
+  delay_sub:
+    type: Delay
+    parameters:
+      delay: 0.0
+      unit: ms
+      subsample: false
+  limit_left:
+    type: Limiter
+    parameters:
+      soft_clip: true
+      clip_limit: -0.5
+  limit_right:
+    type: Limiter
+    parameters:
+      soft_clip: true
+      clip_limit: -0.5
+  limit_sub:
+    type: Limiter
+    parameters:
+      soft_clip: true
+      clip_limit: -0.5
+mixers:
+  to_2_1:
+    channels:
+      in: 2
+      out: 3
+    mapping:
+      - dest: 0
+        sources:
+          - channel: 0
+            gain: 0.0
+            inverted: false
+      - dest: 1
+        sources:
+          - channel: 1
+            gain: 0.0
+            inverted: false
+      - dest: 2
+        sources:
+          - channel: 0
+            gain: 0.0
+            inverted: false
+          - channel: 1
+            gain: 0.0
+            inverted: false
+pipeline:
+  - type: Mixer
+    name: to_2_1
+  - type: Filter
+    channels: [0]
+    names:
+      - hp_sat_left
+      - delay_left
+      - limit_left
+  - type: Filter
+    channels: [1]
+    names:
+      - hp_sat_right
+      - delay_right
+      - limit_right
+  - type: Filter
+    channels: [2]
+    names:
+      - lp_sub
+      - delay_sub
+      - limit_sub
