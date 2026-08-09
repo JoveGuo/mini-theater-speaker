@@ -14,6 +14,8 @@ V1 使用 **iTOP 光盘提供的 Ubuntu 20.04 LTS（arm64）64-bit 无桌面版�
 - **ubuntu20_64bit 有桌面版**：仅当需要在板子上直接操作图形界面时使用，不用于产品基线；
 - **ubuntu16 文件系统**：已完全停止维护，排除。
 
+SDK 内核/dts、WiFi/BT、固件部署的当前状态与下一步清单见 [docs/rk3399_sdk_bringup.md](rk3399_sdk_bringup.md)。
+
 ### 2.1 启动策略（推荐）
 
 当前板卡刷的是 Android 8，不建议直接擦除：

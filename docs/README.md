@@ -10,6 +10,7 @@
 | [hardware_rk3399.md](hardware_rk3399.md) | RK3399 硬件平台说明 |
 | [hardware_bom.md](hardware_bom.md) | 硬件清单（BOM） |
 | [linux_rk3399_setup.md](linux_rk3399_setup.md) | Linux 板卡接入指南 |
+| [rk3399_sdk_bringup.md](rk3399_sdk_bringup.md) | RK3399 SDK 板级 Bring-up 状态与计划 |
 | [measurement_method.md](measurement_method.md) | 测量与验收方法 |
 | [signal_chain.md](signal_chain.md) | 信号链速览 |
 | [roadmap.md](roadmap.md) | 开发路线图 |
