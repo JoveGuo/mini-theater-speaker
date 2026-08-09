@@ -52,11 +52,20 @@ bluetoothctl list
 2. 蓝牙实际挂在哪个 tty（`/dev/ttyS0` 还是 `/dev/ttyS4`）；
 3. `/lib/firmware/rtlbt/` 里是否已有 RTL8822CS 固件。
 
+**板端进展（2026-08-09）**：
+
+- ✅ WiFi 已确认可用：`dmesg` 显示 `wifi_chip_type = rtl8822cs`，SDIO 识别成功，`wlan0` 已出现；
+- ⚠️ 最小化 Ubuntu 未安装 `ip` 命令，需要先安装 `iproute2` / `net-tools`。
+
 ## 4. 下一步开发清单
 
 ### 4.1 板端基线确认（不改代码）
 
 ```bash
+# 先补齐基础网络工具（最小化镜像缺少 ip 命令）
+sudo apt update
+sudo apt install -y iproute2 net-tools
+
 # 音频设备
 aplay -l
 arecord -l

@@ -61,7 +61,8 @@ cat /proc/asound/cards
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-yaml git curl bluez pipewire wireplumber
+sudo apt install -y python3 python3-yaml git curl bluez pipewire wireplumber \
+  iproute2 net-tools wpasupplicant
 ```
 
 6. 安装 CamillaDSP：优先使用官方 aarch64 Linux 预编译包，或 `cargo install camilladsp`。
