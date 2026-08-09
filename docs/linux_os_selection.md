@@ -27,19 +27,19 @@
 
 ## 3. 推荐方案
 
-**Ubuntu 24.04 LTS（arm64）minimal + iTOP/Rockchip BSP 内核**
+**iTOP 提供的 Ubuntu 20.04 LTS（arm64）无桌面版 rootfs + 厂商 BSP 内核**
 
 理由：
 
 1. **与现有经验匹配**：Android 开发环境的主机通常就是 Ubuntu，`apt`、系统命令和排错思路可以直接平移，学习成本最低；
 2. **技术栈匹配**：BlueZ、PipeWire、ALSA、Python3 都是 apt 包；CamillaDSP 用官方 aarch64 预编译包或 `cargo install`，不依赖发行版仓库；
 3. **生态与资料最多**：Ubuntu 教程、论坛和厂商资料最丰富，遇到问题最容易搜到答案；
-4. **镜像来源充足**：iTOP-3399 官方提供 Ubuntu 镜像；Armbian 也提供 RK3399 的 Ubuntu 24.04 minimal 镜像可做内核/rootfs 参照；
+4. **厂商现成可用**：iTOP 光盘提供 Ubuntu 20.04 64-bit 无桌面版文件系统，直接与厂商内核配套，省去自己拼 rootfs 的工作；
 5. **内核策略清晰**：保留厂商 BSP 内核（确保 ALC5651/AP6354 驱动和固件可用），只替换 rootfs 为 Ubuntu minimal；
-6. **支持期明确**：Ubuntu 24.04 LTS 标准支持至 2029，Ubuntu Pro 可延至 2034；26.04 LTS 支持至 2031/2036；
+6. **无桌面版更合适**：音响设备是 headless 应用，桌面环境只增加内存/CPU 占用和后台干扰；20.04 标准支持已于 2025 年 5 月结束，但 ESM 安全维护到 2030，做 V1 验证足够；
 7. **产品化路径平滑**：先 Ubuntu 跑通，若未来出货量大、定制深，再迁移 Yocto/Buildroot；应用层和音频 profile 不受影响。
 
-> Debian 与 Ubuntu 同源，apt 命令、软件包和系统结构几乎一致；如果后续发现 Ubuntu 太重或想要更保守的基线，切回 Debian 的成本很低。
+> Ubuntu 20.04 与 16.04 的选择：**16.04 已彻底停止维护，排除**；桌面版仅在没有远程开发条件、需要在板子上看图形界面时才考虑，不作为产品基线。
 
 ## 4. 备选与排除
 
@@ -54,13 +54,13 @@
 
 ```text
 BSP 内核（厂商 SDK / Armbian 内核）
-  + Ubuntu 24.04 LTS arm64 minimal rootfs
+  + iTOP Ubuntu 20.04 LTS arm64 无桌面版 rootfs
   + bluez / pipewire / wireplumber / alsa-utils / python3
   + CamillaDSP（官方预编译或 cargo，固定版本）
   + systemd 服务（camilladsp、theaterd、monitor）
 ```
 
-优先检查 iTOP 光盘/SDK 是否提供现成 Ubuntu 镜像：有则先烧录跑通硬件；若版本过旧（如 16.04），再用厂商 BSP 内核 + Ubuntu 24.04 minimal rootfs 重建。
+V1 直接使用 iTOP 光盘中的 Ubuntu 20.04 64-bit 无桌面版文件系统；若后续需要更新的用户态（如 PipeWire 新版本），可在保持厂商 BSP 内核不变的前提下升级到 24.04 LTS rootfs。
 
 V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否需要 Yocto/Buildroot。
 

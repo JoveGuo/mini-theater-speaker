@@ -33,7 +33,7 @@
 **交付物**
 
 - 系统烧录、ALSA 设备确认；
-- Ubuntu 24.04 LTS arm64 rootfs + 厂商 BSP 内核（系统选型见 `docs/linux_os_selection.md`）；
+- iTOP Ubuntu 20.04 LTS arm64 无桌面版 rootfs + 厂商 BSP 内核（系统选型见 `docs/linux_os_selection.md`）；
 - USB 声卡输出验证；
 - AP6354 蓝牙 A2DP 接入；
 - ALC5651 模拟 Line-in 接入；

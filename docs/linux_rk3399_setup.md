@@ -8,7 +8,11 @@ RK3399（双 A72 + 四 A53）跑 2.1 分频、EQ、低音管理和限幅绰绰�
 
 ## 2. 系统选型
 
-V1 使用 **Ubuntu 24.04 LTS（arm64）rootfs + 厂商 BSP 内核**，原因与对比见 `docs/linux_os_selection.md`。优先复用 iTOP SDK 的内核/设备树/固件，只把用户态 rootfs 换成 Ubuntu minimal；若厂商已有 Ubuntu 镜像（iTOP 光盘/SDK 中通常提供），可直接烧录并在其上安装依赖。
+V1 使用 **iTOP 光盘提供的 Ubuntu 20.04 LTS（arm64）64-bit 无桌面版文件系统 + 厂商 BSP 内核**，原因与对比见 `docs/linux_os_selection.md`。三个候选中选择无桌面版 20.04：
+
+- **ubuntu20_64bit 无桌面版**：首选，headless 音响设备不需要图形界面，资源占用最小；
+- **ubuntu20_64bit 有桌面版**：仅当需要在板子上直接操作图形界面时使用，不用于产品基线；
+- **ubuntu16 文件系统**：已完全停止维护，排除。
 
 ### 2.1 启动策略（推荐）
 
