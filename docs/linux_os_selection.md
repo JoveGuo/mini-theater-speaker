@@ -1,7 +1,7 @@
 # Linux 系统选型
 
 > 状态：建议稿，待 V1 评审确认  
-> 结论：**Debian（arm64）rootfs + 厂商 BSP 内核**
+> 结论：**Ubuntu LTS（arm64）rootfs + 厂商 BSP 内核**（Debian 同源，作为备选）
 
 ## 1. 需求约束
 
@@ -27,21 +27,25 @@
 
 ## 3. 推荐方案
 
-**Debian 13（trixie，arm64）minimal + iTOP/Rockchip BSP 内核**
+**Ubuntu 24.04 LTS（arm64）minimal + iTOP/Rockchip BSP 内核**
 
 理由：
 
-1. **技术栈匹配**：BlueZ、PipeWire、ALSA、Python3 都是 apt 包；CamillaDSP 用官方 aarch64 预编译包或 `cargo install`，不依赖发行版仓库；
-2. **迭代效率最高**：验证阶段要频繁调整 rootfs、驱动和配置，Debian 改起来最快，不被构建系统卡住；
-3. **内核策略清晰**：保留厂商 BSP 内核（确保 ALC5651/AP6354 驱动和固件可用），只替换 rootfs 为 Debian；必要时参考 Armbian 的 RK3399 Debian 镜像做内核侧对照；
-4. **产品化路径平滑**：先 Debian 跑通，若未来出货量大、定制深，再迁移 Yocto/Buildroot；应用层和音频 profile 不受影响；
-5. **支持期明确**：Debian 13 稳定版 2025-08 发布，官方支持至 2028，LTS 至 2035，适合产品长期维护。
+1. **与现有经验匹配**：Android 开发环境的主机通常就是 Ubuntu，`apt`、系统命令和排错思路可以直接平移，学习成本最低；
+2. **技术栈匹配**：BlueZ、PipeWire、ALSA、Python3 都是 apt 包；CamillaDSP 用官方 aarch64 预编译包或 `cargo install`，不依赖发行版仓库；
+3. **生态与资料最多**：Ubuntu 教程、论坛和厂商资料最丰富，遇到问题最容易搜到答案；
+4. **镜像来源充足**：iTOP-3399 官方提供 Ubuntu 镜像；Armbian 也提供 RK3399 的 Ubuntu 24.04 minimal 镜像可做内核/rootfs 参照；
+5. **内核策略清晰**：保留厂商 BSP 内核（确保 ALC5651/AP6354 驱动和固件可用），只替换 rootfs 为 Ubuntu minimal；
+6. **支持期明确**：Ubuntu 24.04 LTS 标准支持至 2029，Ubuntu Pro 可延至 2034；26.04 LTS 支持至 2031/2036；
+7. **产品化路径平滑**：先 Ubuntu 跑通，若未来出货量大、定制深，再迁移 Yocto/Buildroot；应用层和音频 profile 不受影响。
+
+> Debian 与 Ubuntu 同源，apt 命令、软件包和系统结构几乎一致；如果后续发现 Ubuntu 太重或想要更保守的基线，切回 Debian 的成本很低。
 
 ## 4. 备选与排除
 
 | 系统 | 结论 | 原因 |
 | --- | --- | --- |
-| Ubuntu | 备选 | 包更新、社区资料多；但体积和后台服务更多，V1 验证不必要 |
+| Debian | 备选 | 与 Ubuntu 同源、更轻、更保守；切换成本低 |
 | Yocto | 量产阶段再评估 | 可复现性和裁剪最好，但开发周期长，V1 阶段过重 |
 | Buildroot | 量产阶段再评估 | 镜像最小，但音频/Web/Python 生态维护成本高 |
 | OpenWrt | 排除 | 面向网络设备，Bluetooth A2DP、PipeWire、CamillaDSP 生态差 |
@@ -50,11 +54,13 @@
 
 ```text
 BSP 内核（厂商 SDK / Armbian 内核）
-  + Debian 13 arm64 minimal rootfs
+  + Ubuntu 24.04 LTS arm64 minimal rootfs
   + bluez / pipewire / wireplumber / alsa-utils / python3
   + CamillaDSP（官方预编译或 cargo，固定版本）
   + systemd 服务（camilladsp、theaterd、monitor）
 ```
+
+优先检查 iTOP 光盘/SDK 是否提供现成 Ubuntu 镜像：有则先烧录跑通硬件；若版本过旧（如 16.04），再用厂商 BSP 内核 + Ubuntu 24.04 minimal rootfs 重建。
 
 V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否需要 Yocto/Buildroot。
 
@@ -63,7 +69,7 @@ V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否�
 | 风险 | 缓解 |
 | --- | --- |
 | BSP 内核版本较旧 | 不追上游内核，以厂商 SDK 为基线；应用层不依赖具体内核版本 |
-| CamillaDSP 不在 Debian 仓库 | 使用官方发布包或 cargo，锁定版本并做校验 |
+| CamillaDSP 不在 Ubuntu 仓库 | 使用官方发布包或 cargo，锁定版本并做校验 |
 | AP6354 固件/NVRAM 依赖厂商 | 保留 BSP 中的固件与设备树配置 |
 | OTA 尚未规划 | 产品化阶段评估 RAUC/swupdate 或自建 apt 仓库 |
 
@@ -85,4 +91,4 @@ V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否�
 - 后续开发手机端遥控 App（通过 HTTP/WebSocket 控制 Linux DSP）；
 - 双系统模式下保留 eMMC Android 作为备选或演示系统。
 
-推荐的过渡方案：**保留 eMMC 上的 Android，从 SD 卡启动 Debian**（见 `docs/linux_rk3399_setup.md`），既不影响现有环境，又能以最快速度进入我们的音频管线开发。
+推荐的过渡方案：**保留 eMMC 上的 Android，从 SD 卡启动 Ubuntu**（见 `docs/linux_rk3399_setup.md`），既不影响现有环境，又能以最快速度进入我们的音频管线开发。

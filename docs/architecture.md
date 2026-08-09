@@ -77,10 +77,10 @@ flowchart TB
 
 ### 4.0 操作系统层
 
-- 推荐 **Debian 13（arm64）rootfs + 厂商 BSP 内核**；
+- 推荐 **Ubuntu 24.04 LTS（arm64）rootfs + 厂商 BSP 内核**（Debian 同源备选）；
 - 音频栈（ALSA/PipeWire/BlueZ）、Python、Web 组件用 apt 管理，迭代最快；
 - 内核与驱动保持厂商 SDK 基线，避免上游内核破坏 ALC5651/AP6354 支持；
-- 当前 eMMC 上的 Android 8 保留，开发阶段从 SD 卡启动 Debian（双系统过渡）；
+- 当前 eMMC 上的 Android 8 保留，开发阶段从 SD 卡启动 Ubuntu（双系统过渡）；
 - Android 不作为运行底座，但其开发环境可用于 BSP 编译和未来手机遥控 App；
 - 详细对比见 `docs/linux_os_selection.md`。
 
