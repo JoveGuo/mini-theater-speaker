@@ -1,58 +1,125 @@
 # RK3399 Linux 板卡接入指南
 
-## 为什么可用
+> 硬件细节见 `docs/hardware_rk3399.md`，管线定义见 `docs/audio_pipeline.md`。
 
-RK3399 是双 Cortex-A72 + 四 Cortex-A53，跑 CamillaDSP 的 2.1 分频、EQ、低音管理和限幅绰绰有余；后续 5.1/7.1 虚拟环绕也可先用它做算法验证。第一阶段不需要换 RK3588 或 Pi 4B。
+## 1. 为什么用 RK3399
 
-## 硬件连接
+RK3399（双 A72 + 四 A53）跑 2.1 分频、EQ、低音管理和限幅绰绰有余；I2S0 支持 8 声道 TDM，后续 5.1/7.1 也能先做算法验证。V1 不需要换 RK3588 或树莓派。
+
+## 2. 硬件连接
 
 ```text
 RK3399 Linux 板卡
-  USB 口 -> USB 2.1/5.1 声卡
-  声卡 3 路模拟输出 -> TPA3116 2.1 功放
-  功放 -> 左卫星 + 右卫星 + 低音炮
+  ├─ USB Host ─> USB 3 声道声卡 ─> TPA3116 2.1 功放 ─> L/R/SUB
+  ├─ AP6354   ─> 蓝牙 A2DP 输入
+  ├─ ALC5651  ─> 模拟 Line-in / 耳机监听
+  └─ 以太网    ─> 调试、后续网络流媒体
 ```
 
-## 系统准备
+## 3. 内核与设备树要点
 
-1. 使用配套 Linux SDK 编译并烧录系统。
-2. 确认系统已启动并连接网络。
-3. 插入 USB 2.1/5.1 声卡，执行：
+确认内核开启/设备树配置：
+
+- ALSA：`CONFIG_SND_ALOOP`（回环验证）、`CONFIG_SND_SOC_ROCKCHIP_I2S`、ALC5651 的 ASoC 驱动；
+- 蓝牙：`CONFIG_BT`、`CONFIG_BT_HCIUART`、`CONFIG_BT_HCIUART_BCM`（AP6354 对应 Broadcom 蓝牙方案），dts 中配置 `BT_REG_ON`/`WL_REG_ON`；
+- WiFi：SDIO 接口对应 `brcmfmac` 驱动，需正确加载 NVRAM；
+- USB Audio：`CONFIG_SND_USB_AUDIO`。
+
+## 4. 系统准备
+
+1. 使用配套 Linux SDK 编译并烧录系统，确认网络连通。
+2. 查看音频设备：
 
 ```bash
 aplay -l
 arecord -l
+cat /proc/asound/cards
 ```
 
-4. 记录声卡名称，例如 `plughw:CARD=USB,DEV=0`。
+3. 确认 ALC5651 设备出现，例如 `plughw:CARD=rockchiprk3399,DEV=0`。
+4. 插入 USB 声卡，记录设备名，例如 `plughw:CARD=USB,DEV=0`。
 5. 安装依赖：
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-yaml git curl
+sudo apt install -y python3 python3-yaml git curl bluez pipewire wireplumber
 ```
 
-6. 安装 CamillaDSP。优先使用官方 aarch64 Linux 预编译包，或使用 `cargo install camilladsp`。
+6. 安装 CamillaDSP：优先使用官方 aarch64 Linux 预编译包，或 `cargo install camilladsp`。
 
-## 运行验证
-
-把仓库同步到板卡后：
-
-```bash
-cd Theater_speaker_projects
-bash scripts/run_validation.sh
-```
-
-这会生成测试音、校验配置并运行信号链模拟。然后编辑 `configs/2.1.usb.yml`，把 `plughw:CARD=USB,DEV=0` 改成实际声卡名称，再启动 CamillaDSP 加载该配置。
-
-## ALSA 回环验证
-
-如果暂时没有声卡，可以加载 ALSA 回环模块，用 `configs/2.1.yml` 做无硬件验证：
+## 5. 无硬件验证
 
 ```bash
 sudo modprobe snd-aloop
+bash scripts/run_validation.sh
 ```
 
-## 蓝牙输入
+`configs/2.1.yml` 使用 ALSA 回环，适合先验证系统集成。
 
-在 RK3399 Linux 上使用 BlueZ + PipeWire 配置 A2DP sink，然后把蓝牙音频路由到 CamillaDSP 的输入节点。首版使用 SBC/AAC，LDAC 后续评估。
+## 6. 接入 USB 声卡
+
+编辑 `configs/2.1.usb.yml`，把 `plughw:CARD=USB,DEV=0` 改为实际设备名，然后启动：
+
+```bash
+camilladsp configs/2.1.usb.yml
+```
+
+先用测试音验证声道顺序：
+
+```bash
+aplay -D plughw:CARD=USB,DEV=0 assets/test_tones/left_1k.wav
+aplay -D plughw:CARD=USB,DEV=0 assets/test_tones/right_1k.wav
+aplay -D plughw:CARD=USB,DEV=0 assets/test_tones/sub_50.wav
+```
+
+## 7. 蓝牙 A2DP 输入
+
+AP6354 使用 UART HCI + BlueZ：
+
+```bash
+bluetoothctl
+scan on
+pair <phone-mac>
+trust <phone-mac>
+connect <phone-mac>
+```
+
+配置 PipeWire 将蓝牙 sink 路由到 ALSA loopback，CamillaDSP 从 loopback 采集。V1 使用 SBC/AAC；LDAC/aptX 需要评估模块编解码能力。
+
+## 8. 模拟 Line-in（ALC5651）
+
+用 `alsamixer` / `amixer` 打开 Line-in 并设置增益：
+
+```bash
+amixer -c 0 sset 'IN1' 30
+amixer -c 0 sset 'Capture' 20
+arecord -D plughw:CARD=rockchiprk3399,DEV=0 -f S16_LE -c 2 -r 48000 /tmp/linein.wav
+```
+
+再把该 ALSA 设备作为 CamillaDSP 输入源之一（参考 `docs/config_spec.md`）。
+
+## 9. systemd 服务（规划）
+
+建议以 systemd 管理常驻服务：
+
+```ini
+[Unit]
+Description=CamillaDSP theater engine
+After=pipewire.service
+
+[Service]
+ExecStart=/usr/local/bin/camilladsp /etc/theater/configs/2.1.usb.yml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 10. 常见排查
+
+| 现象 | 排查 |
+| --- | --- |
+| `aplay -l` 无 USB 声卡 | 检查 USB 枚举、`dmesg`、UAC 兼容性 |
+| 蓝牙连不上 | 检查 AP6354 供电、`BT_REG_ON`、dts、固件/NVRAM |
+| ALC5651 无声音 | `amixer` 查看 PA/DAC 状态，确认 I2S 时钟和格式 |
+| 输出爆音 | 检查启动顺序、限幅、淡入淡出、功放静音脚时序 |

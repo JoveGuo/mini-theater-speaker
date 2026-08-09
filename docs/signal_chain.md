@@ -1,49 +1,24 @@
-# 2.1 信号链设计
+# 信号链总览
 
-## 目标
+> 完整定义见 [docs/audio_pipeline.md](audio_pipeline.md)，声道规范见 [docs/channel_mapping.md](channel_mapping.md)。
 
-用最低成本验证「立体声输入 -> DSP 低音管理 -> 三路输出」的完整软件链路。首版只处理 PCM，杜比 bitstream 解码由外部播放设备完成。
+## V1 信号链
 
-## 数据流
-
-```mermaid
-flowchart LR
-  A[USB PCM] --> M[Mixer to_2_1]
-  B[蓝牙 A2DP] --> M
-  C[eARC PCM] --> M
-  M --> D[HP L]
-  M --> E[HP R]
-  M --> F[LP SUB]
-  D --> G[Delay + Limiter L]
-  E --> H[Delay + Limiter R]
-  F --> I[Delay + Limiter SUB]
-  G --> J[DAC L]
-  H --> K[DAC R]
-  I --> L[DAC SUB]
+```text
+USB PCM / 蓝牙 A2DP / 模拟 Line-in（立体声）
+  -> 输入选择与归一化（48kHz）
+  -> 声道重映射（stereo -> FL/FR/LFE）
+  -> 前级处理（音量/增益）
+  -> Bass Management（LR4 @ 100Hz）
+  -> 每声道 PEQ / Delay / Gain / Limiter
+  -> 输出重映射（FL=0, FR=1, LFE=2）
+  -> USB 3 声道 DAC -> TPA3116 2.1 功放 -> 扬声器
 ```
 
-## 声道映射
+## 与 5.1/7.1 的关系
 
-| 输出通道 | 含义 | 输入来源 |
-| --- | --- | --- |
-| 0 | L 卫星 | 输入 L |
-| 1 | R 卫星 | 输入 R |
-| 2 | SUB 低音炮 | 输入 L + R |
+2.1 只是管线的一个 profile：
 
-## 默认 DSP 参数
-
-| 参数 | 默认值 | 用途 |
-| --- | --- | --- |
-| 采样率 | 48000 Hz | 统一处理采样率 |
-| 分频类型 | Linkwitz-Riley 4 阶 | 声学相位衔接更平滑 |
-| 分频点 | 100 Hz | 后续按实际单元测量调整 |
-| 延迟 | 0 ms | 用测量结果做物理延迟对齐 |
-| 限幅 | -0.5 dBFS 软限幅 | 保护功放和单元 |
-
-## 配置文件
-
-- `configs/2.1.yml`：ALSA 回环设备，适合 Linux 无硬件验证。
-- `configs/2.1.stdin.yml`：stdin/stdout，适合管道测试。
-- `configs/2.1.file.yml`：读入生成的原始 PCM 文件并写出 3 声道文件，适合确定性回归。
-
-所有配置共用同一套 filters、mixer 和 pipeline，只替换输入输出设备。
+- 增加声道时，输入布局、Bass Management 求和集合、输出映射同步扩展；
+- 管线阶段本身不变；
+- 当前 CamillaDSP 配置：`configs/2.1*.yml`。

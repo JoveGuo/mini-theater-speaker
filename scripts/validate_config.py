@@ -4,9 +4,144 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _strip_comment(line: str) -> str:
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(line):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double:
+            return line[:i].rstrip()
+    return line.rstrip()
+
+
+def _split_key_value(line: str) -> tuple[str, str] | None:
+    in_single = False
+    in_double = False
+    for i, ch in enumerate(line):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == ":" and not in_single and not in_double:
+            if i + 1 == len(line) or line[i + 1] == " ":
+                return line[:i].strip(), line[i + 1 :].strip()
+    return None
+
+
+def _split_flow_list(text: str) -> list[str]:
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _parse_scalar(text: str):
+    text = text.strip()
+    if text == "":
+        return None
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        return text[1:-1]
+    if text.startswith("[") and text.endswith("]"):
+        return [_parse_scalar(part) for part in _split_flow_list(text[1:-1])]
+    if text.startswith("{") and text.endswith("}"):
+        result: dict = {}
+        for part in _split_flow_list(text[1:-1]):
+            kv = _split_key_value(part)
+            if kv is None:
+                raise ValueError(f"invalid flow mapping: {part}")
+            result[kv[0]] = _parse_scalar(kv[1])
+        return result
+    if text in ("true", "True", "TRUE"):
+        return True
+    if text in ("false", "False", "FALSE"):
+        return False
+    if text in ("null", "Null", "NULL", "~"):
+        return None
+    if re.fullmatch(r"[-+]?\d+", text):
+        return int(text)
+    if re.fullmatch(r"[-+]?(?:\d+\.\d*|\.\d+)(?:[eE][-+]?\d+)?", text):
+        return float(text)
+    return text
+
+
+def _load_mini_yaml(path: Path) -> dict:
+    """Parse the small YAML subset used by this repository's configs."""
+
+    raw_lines: list[tuple[int, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = _strip_comment(line)
+        if not stripped.strip():
+            continue
+        indent = len(stripped) - len(stripped.lstrip(" "))
+        raw_lines.append((indent, stripped.strip()))
+
+    def parse_at(idx: int, indent: int):
+        if idx >= len(raw_lines):
+            return None, idx
+        text = raw_lines[idx][1]
+        is_list = text.startswith("- ") or text == "-"
+
+        if is_list:
+            result: list = []
+            while idx < len(raw_lines) and raw_lines[idx][0] == indent:
+                item_text = raw_lines[idx][1]
+                if item_text == "-":
+                    body = ""
+                elif item_text.startswith("- "):
+                    body = item_text[2:].strip()
+                else:
+                    break
+                idx += 1
+                if body == "":
+                    if idx < len(raw_lines) and raw_lines[idx][0] > indent:
+                        child, idx = parse_at(idx, raw_lines[idx][0])
+                        result.append(child)
+                    else:
+                        result.append(None)
+                    continue
+                kv = _split_key_value(body)
+                if kv is None:
+                    result.append(_parse_scalar(body))
+                    continue
+                item: dict = {kv[0]: _parse_scalar(kv[1]) if kv[1] else None}
+                if idx < len(raw_lines) and raw_lines[idx][0] > indent:
+                    child, idx = parse_at(idx, raw_lines[idx][0])
+                    if isinstance(child, dict):
+                        item.update(child)
+                    else:
+                        raise ValueError(f"expected mapping after {body}")
+                result.append(item)
+            return result, idx
+
+        result: dict = {}
+        while idx < len(raw_lines) and raw_lines[idx][0] == indent:
+            kv = _split_key_value(raw_lines[idx][1])
+            if kv is None:
+                raise ValueError(f"expected key: value, got: {raw_lines[idx][1]}")
+            key, value = kv
+            idx += 1
+            if value == "":
+                if idx < len(raw_lines) and raw_lines[idx][0] > indent:
+                    child, idx = parse_at(idx, raw_lines[idx][0])
+                    result[key] = child
+                else:
+                    result[key] = None
+            else:
+                result[key] = _parse_scalar(value)
+        return result, idx
+
+    value, idx = parse_at(0, raw_lines[0][0])
+    if idx != len(raw_lines):
+        raise ValueError(f"unparsed YAML lines starting at line {idx + 1}")
+    if not isinstance(value, dict):
+        raise ValueError("config is not a YAML mapping")
+    return value
 
 
 def _load_with_ruby(path: Path) -> dict:
@@ -26,7 +161,13 @@ def load_yaml(path: Path) -> dict:
     try:
         import yaml
     except ModuleNotFoundError:
-        return _load_with_ruby(path)
+        try:
+            return _load_mini_yaml(path)
+        except Exception as mini_error:
+            try:
+                return _load_with_ruby(path)
+            except Exception:
+                raise mini_error
     with open(path, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh)
 
