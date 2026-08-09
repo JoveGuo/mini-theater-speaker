@@ -1,0 +1,68 @@
+# Linux 系统选型
+
+> 状态：建议稿，待 V1 评审确认  
+> 结论：**Debian（arm64）rootfs + 厂商 BSP 内核**
+
+## 1. 需求约束
+
+本项目对 Linux 系统的核心诉求：
+
+- 快速迭代：经常安装/更新音频栈（BlueZ、PipeWire、ALSA）、Python、Web 组件；
+- 成熟的音频生态：A2DP、USB Audio、I2S、S/PDIF、CamillaDSP；
+- 厂商 BSP 支持：RK3399 的 ALC5651、AP6354 需要厂商内核/固件；
+- 可产品化：systemd 服务、看门狗、后续 OTA；
+- 换 SoC 友好：应用层和音频管线不应绑定某个发行版。
+
+## 2. 方案对比
+
+| 维度 | Buildroot | Debian | Ubuntu | Yocto | OpenWrt |
+| --- | --- | --- | --- | --- | --- |
+| 开发迭代速度 | 慢，改包需重新构建 | 快，apt 即装即用 | 快 | 慢，bitbake 全量构建 | 中 |
+| 音频/蓝牙生态 | 需手工集成，PipeWire/CamillaDSP 不在默认包集 | 好：bluez、pipewire、alsa-utils 都有 | 好，版本较新 | 可控，但需自己写 recipe | 差，面向路由/网关 |
+| BSP/驱动适配 | 需自行集成厂商内核 | 可用厂商 BSP 内核 + Debian rootfs | 同左，镜像更重 | 需厂商 layer 或自维护 | 不适合 |
+| 镜像体积 | 最小 | 小~中（minimal 约 300MB） | 较大 | 可裁剪 | 最小 |
+| 量产/OTA | swupdate 可行，工作量大 | apt/RAUC/swupdate 都可行 | snap/apt | RAUC/swupdate 成熟 | opkg |
+| 团队门槛 | 中-高 | 低 | 低 | 高 | 中 |
+| 适合场景 | 功能定型后的批量生产 | 开发验证 + 中小批量产品 | 开发验证 | 大型产品线、强可复现性要求 | 路由器/网关 |
+
+## 3. 推荐方案
+
+**Debian 13（trixie，arm64）minimal + iTOP/Rockchip BSP 内核**
+
+理由：
+
+1. **技术栈匹配**：BlueZ、PipeWire、ALSA、Python3 都是 apt 包；CamillaDSP 用官方 aarch64 预编译包或 `cargo install`，不依赖发行版仓库；
+2. **迭代效率最高**：验证阶段要频繁调整 rootfs、驱动和配置，Debian 改起来最快，不被构建系统卡住；
+3. **内核策略清晰**：保留厂商 BSP 内核（确保 ALC5651/AP6354 驱动和固件可用），只替换 rootfs 为 Debian；必要时参考 Armbian 的 RK3399 Debian 镜像做内核侧对照；
+4. **产品化路径平滑**：先 Debian 跑通，若未来出货量大、定制深，再迁移 Yocto/Buildroot；应用层和音频 profile 不受影响；
+5. **支持期明确**：Debian 13 稳定版 2025-08 发布，官方支持至 2028，LTS 至 2035，适合产品长期维护。
+
+## 4. 备选与排除
+
+| 系统 | 结论 | 原因 |
+| --- | --- | --- |
+| Ubuntu | 备选 | 包更新、社区资料多；但体积和后台服务更多，V1 验证不必要 |
+| Yocto | 量产阶段再评估 | 可复现性和裁剪最好，但开发周期长，V1 阶段过重 |
+| Buildroot | 量产阶段再评估 | 镜像最小，但音频/Web/Python 生态维护成本高 |
+| OpenWrt | 排除 | 面向网络设备，Bluetooth A2DP、PipeWire、CamillaDSP 生态差 |
+
+## 5. 落地建议
+
+```text
+BSP 内核（厂商 SDK / Armbian 内核）
+  + Debian 13 arm64 minimal rootfs
+  + bluez / pipewire / wireplumber / alsa-utils / python3
+  + CamillaDSP（官方预编译或 cargo，固定版本）
+  + systemd 服务（camilladsp、theaterd、monitor）
+```
+
+V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否需要 Yocto/Buildroot。
+
+## 6. 风险与缓解
+
+| 风险 | 缓解 |
+| --- | --- |
+| BSP 内核版本较旧 | 不追上游内核，以厂商 SDK 为基线；应用层不依赖具体内核版本 |
+| CamillaDSP 不在 Debian 仓库 | 使用官方发布包或 cargo，锁定版本并做校验 |
+| AP6354 固件/NVRAM 依赖厂商 | 保留 BSP 中的固件与设备树配置 |
+| OTA 尚未规划 | 产品化阶段评估 RAUC/swupdate 或自建 apt 仓库 |

@@ -75,6 +75,13 @@ flowchart TB
 
 ## 4. 模块划分
 
+### 4.0 操作系统层
+
+- 推荐 **Debian 13（arm64）rootfs + 厂商 BSP 内核**；
+- 音频栈（ALSA/PipeWire/BlueZ）、Python、Web 组件用 apt 管理，迭代最快；
+- 内核与驱动保持厂商 SDK 基线，避免上游内核破坏 ALC5651/AP6354 支持；
+- 详细对比见 `docs/linux_os_selection.md`。
+
 ### 4.1 输入源适配层
 
 | 输入源 | 接口 | V1 状态 | 说明 |
