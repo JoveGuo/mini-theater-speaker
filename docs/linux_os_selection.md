@@ -66,3 +66,23 @@ V1 阶段以“能跑通、能快速改”优先；量产化时再决定是否�
 | CamillaDSP 不在 Debian 仓库 | 使用官方发布包或 cargo，锁定版本并做校验 |
 | AP6354 固件/NVRAM 依赖厂商 | 保留 BSP 中的固件与设备树配置 |
 | OTA 尚未规划 | 产品化阶段评估 RAUC/swupdate 或自建 apt 仓库 |
+
+## 7. 为什么不用 Android（即使板子现成）
+
+用户当前板卡刷的是 Android 8，开发环境也已搭好，但本项目**不建议以 Android 作为运行底座**：
+
+| 障碍 | 说明 |
+| --- | --- |
+| DSP 引擎不兼容 | CamillaDSP 是 Linux 用户态程序，依赖 ALSA/PipeWire；Android 用 AudioFlinger/Audio HAL 独占音频设备，无法直接跑现有管线 |
+| A2DP sink 需要厂商补丁 | Android 默认是 A2DP source（把声音发给耳机/音箱），要做“蓝牙音箱”接收手机音频，需要改 Rockchip SDK 的 `profile_supported_a2dp_sink` 并重新编译，版本脆弱 |
+| 多声道与自定义 DSP 受限 | USB 3/6/8 声道输出、Bass Management、每声道 EQ 都不是 Android 正常支持路径，需要重写 Audio HAL |
+| 控制面不透明 | IR/GPIO/看门狗/Web UI 用 Android init + Java 框架实现更重，迭代更慢 |
+| 系统老旧 | Android 8（2017）早已停止维护，蓝牙与音频栈陈旧，不适合作为新产品基线 |
+
+**Android 开发环境仍有价值**，但用途应该放在：
+
+- 编译/提取 BSP 内核、设备树、AP6354/ALC5651 固件；
+- 后续开发手机端遥控 App（通过 HTTP/WebSocket 控制 Linux DSP）；
+- 双系统模式下保留 eMMC Android 作为备选或演示系统。
+
+推荐的过渡方案：**保留 eMMC 上的 Android，从 SD 卡启动 Debian**（见 `docs/linux_rk3399_setup.md`），既不影响现有环境，又能以最快速度进入我们的音频管线开发。

@@ -10,6 +10,15 @@ RK3399（双 A72 + 四 A53）跑 2.1 分频、EQ、低音管理和限幅绰绰�
 
 V1 使用 **Debian 13（arm64）rootfs + 厂商 BSP 内核**，原因与对比见 `docs/linux_os_selection.md`。优先复用 iTOP SDK 的内核/设备树/固件，只把用户态 rootfs 换成 Debian minimal；若厂商已有 Debian/Ubuntu 镜像，可直接在其上安装依赖。
 
+### 2.1 启动策略（推荐）
+
+当前板卡刷的是 Android 8，不建议直接擦除：
+
+- **保留 eMMC 上的 Android**，作为备选/演示系统；
+- **从 SD 卡（或 USB）启动 Debian**，用于本项目开发；
+- RK3399 的启动选择由 boot 拨码/烧录工具控制，开发完成后可再决定量产固件方案；
+- Android 开发环境保留，用于编译 BSP 内核/固件，或后续做手机遥控 App。
+
 ## 3. 硬件连接
 
 ```text
