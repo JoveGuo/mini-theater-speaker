@@ -34,7 +34,7 @@
 
 - 系统烧录、ALSA 设备确认；
 - iTOP Ubuntu 20.04 LTS arm64 无桌面版 rootfs + 厂商 BSP 内核（系统选型见 `docs/linux_os_selection.md`）；
-- SDK 板级 bring-up：内核/dts 适配 AP6354、WiFi/BT 驱动与固件、snd-aloop 开启（见 `docs/rk3399_sdk_bringup.md`）；
+- SDK 板级 bring-up：RTL8822CS WiFi/BT 确认与蓝牙固件部署、snd-aloop 开启（见 `docs/rk3399_sdk_bringup.md`）；
 - USB 声卡输出验证；
 - AP6354 蓝牙 A2DP 接入；
 - ALC5651 模拟 Line-in 接入；

@@ -1,10 +1,16 @@
 # RK3399 SDK 板级 Bring-up 状态与下一步计划
 
-> 检查日期：2026-08-09  
+> 检查日期：2026-08-09（已根据板端确认更新）
 > SDK 路径：`Z:\Code\rk3399_linux_sdk_v2.0`  
 > 板级配置：`device/rockchip/rk3399/BoardConfig.mk`，`RK_KERNEL_DTS=itop-3399_linux-lvds`
 
-## 1. SDK 现状（已确认）
+## 1. 板端已确认信息
+
+- Ubuntu 实际版本为 **20.04 无桌面版**；`ubuntu/ubuntu_1604.img` 只是统一刷机时的文件名，不代表系统版本；
+- WiFi/蓝牙芯片为 **RTL8822CS**（板载丝印确认），与 SDK 默认设备树一致；
+- Ubuntu 系统已成功启动。
+
+## 2. SDK 现状（已确认）
 
 | 项目 | 状态 |
 | --- | --- |
@@ -15,37 +21,40 @@
 | snd-aloop | 未启用，需要打开（用于无硬件回环验证） |
 | HDMI 音频 | 通过 i2s2 已启用 |
 | SPDIF | dts 中 `status = "disabled"`，需要时再打开 |
-| WiFi | dts 默认 `WIFI_RTL8822CS`；`CONFIG_CYW_BCMDHD` 未启用。若板载芯片是 AP6354，当前 WiFi 驱动不匹配 |
-| 蓝牙 | `CONFIG_BT=y`、H4 已启用，但 `CONFIG_BT_HCIUART_BCM` 未启用，AP6354 蓝牙当前不可用 |
-| AP6354 固件 | SDK 已包含：`fw_bcm4354a1_ag.bin`、`nvram_ap6354.txt`、`BCM4354A2.hcd` / `bcm4354a1.hcd`（`external/rkwifibt/firmware/broadcom/all/`） |
-| Ubuntu 镜像 | `ubuntu/ubuntu_1604.img`（3.2GB）。文件名与“20.04 无桌面版”不一致，需在板端确认实际版本 |
+| WiFi（RTL8822CS） | dts `wifi_chip_type = "rtl8822cs"`，`CONFIG_RTL8822CS=y` 内置驱动，WiFi 固件内置于驱动源码（`hal8822c_fw.c`），预期 `wlan0` 可直接出现，需板端验证 |
+| 蓝牙（RTL8822CS） | 走 Realtek UART H5：SDK 提供预编译 `hci_uart.ko`（`external/rkwifibt/realtek/bluetooth_uart_driver/`）和 `rtk_hciattach` 源码；固件 `rtl8822cs_fw` / `rtl8822cs_config` **未在 SDK 中找到**，需板端确认或向 Realtek/厂商获取 |
+| 蓝牙固件路径 | `rtk_hciattach` 固定从 `/lib/firmware/rtlbt/` 读取 `rtl8822cs_fw` 与 `rtl8822cs_config` |
+| 蓝牙 UART | dts 使用 uart0（`/dev/ttyS0` 预期）；SDK 里的 `bt_realtek_start` / `rk_wifi_init.c` 默认写的是 `/dev/ttyS4`，板端需以实际设备名为准 |
 
-## 2. 待确认项
-
-1. **板载 WiFi/BT 芯片型号**：SDK dts 默认 RTL8822CS，但硬件资料里是 AP6354。请在板端确认：
+## 3. 待板端确认/验证
 
 ```bash
-ls /sys/bus/sdio/devices/*/device
-dmesg | grep -iE "wlan|bluetooth|brcm|rtl|sdio"
+# WiFi 是否出现
 ip link
+nmcli dev status
+dmesg | grep -iE "wlan|8822|sdio|rtl"
+
+# 蓝牙串口设备名
+ls -l /dev/ttyS*
+
+# 蓝牙固件是否已在系统里
+ls -l /lib/firmware/rtlbt/
+find / -iname "*8822*" 2>/dev/null
+
+# 蓝牙控制器是否出现
+hciconfig -a
+bluetoothctl list
 ```
 
-也可以直接看模块丝印。
+重点确认：
 
-2. **Ubuntu 实际版本**：
+1. `wlan0` 是否存在（存在则 WiFi 无需改内核）；
+2. 蓝牙实际挂在哪个 tty（`/dev/ttyS0` 还是 `/dev/ttyS4`）；
+3. `/lib/firmware/rtlbt/` 里是否已有 RTL8822CS 固件。
 
-```bash
-cat /etc/os-release
-uname -a
-```
+## 4. 下一步开发清单
 
-如果输出不是 `20.04`，需要拿到正确的 ubuntu20_64bit 无桌面版镜像。
-
-3. **当前内核是否由这套 SDK 编译**：`uname -r` 与 SDK 内 `kernel/.config` 是否能对上，决定后续是增量编译还是全量重刷。
-
-## 3. 下一步开发清单
-
-### 3.1 板端基线确认（不改代码）
+### 4.1 板端基线确认（不改代码）
 
 ```bash
 # 音频设备
@@ -53,35 +62,24 @@ aplay -l
 arecord -l
 cat /proc/asound/cards
 
-# 蓝牙/WiFi 状态
-rfkill list
-bluetoothctl list
-ip link
-
-# 存储与分区（后续刷内核需要）
-cat /proc/partitions
+# 网络
+ip addr
+ping -c 3 archive.ubuntu.com
 ```
 
-确认：
+确认 rt5651 声卡、USB 声卡、WiFi/蓝牙状态，以及 SSH/网络是否可用。
 
-- rt5651 声卡是否出现；
-- USB 声卡插入后能否被识别；
-- WiFi/BT 当前是否可用；
-- SSH 与网络是否可用（后续 apt 安装依赖）。
+### 4.2 内核调整（当前只需一项）
 
-### 3.2 内核与设备树调整（在 SDK 中进行）
+在 `kernel/arch/arm64/configs/rockchip_linux_defconfig` 中开启：
 
-以板载芯片确认为 **AP6354** 为前提：
+```text
+CONFIG_SND_ALOOP=y
+```
 
-1. 修改 `kernel/arch/arm64/boot/dts/rockchip/itop-3399_linux-board.dtsi`：
-   - 把 `#define WIFI_RTL8822CS 1` 注释掉；
-   - 增加 `#define WIFI_AP6354 1` 分支，节点内容参考现有 `WIFI_AP6356s` 分支，`wifi_chip_type = "ap6354"`，GPIO 保持不变。
-2. 修改 `kernel/arch/arm64/configs/rockchip_linux_defconfig`：
-   - `CONFIG_CYW_BCMDHD=y`（AP6354 WiFi，SDK 使用 Rockchip cywdhd 驱动）；
-   - `CONFIG_BT_HCIUART_BCM=y`（Broadcom 蓝牙 UART）；
-   - `CONFIG_SND_ALOOP=y`（回环验证）；
-   - 关闭 `CONFIG_RTL8822CS`（避免与 AP6354 冲突）。
-3. 重新编译并打包：
+WiFi/蓝牙**不需要改 dts**，因为板载芯片与 SDK 默认配置一致（RTL8822CS + `wifi_chip_type = "rtl8822cs"`）；蓝牙走 SDK 提供的 out-of-tree `hci_uart.ko`，也不需要改内核 BT 选项。
+
+重新编译并打包：
 
 ```bash
 cd /path/to/rk3399_linux_sdk_v2.0
@@ -90,34 +88,60 @@ cd /path/to/rk3399_linux_sdk_v2.0
 ./build.sh updateimg
 ```
 
-或按板端烧录工具只更新 `boot.img`/`resource.img`。
+> 5.1/7.1 阶段再评估 `CONFIG_SND_SOC_ROCKCHIP_I2S_TDM=y`，V1 不需要。
 
-### 3.3 固件部署到 rootfs
+### 4.3 RTL8822CS 蓝牙用户态部署
 
-AP6354 需要把 SDK 内固件放入 Ubuntu 系统：
+1. 确认/放置固件：
 
 ```bash
-# WiFi（Rockchip cywdhd 默认查找 /vendor/etc/firmware 或 /system/etc/firmware）
-sudo mkdir -p /vendor/etc/firmware
-sudo cp fw_bcm4354a1_ag.bin /vendor/etc/firmware/
-sudo cp nvram_ap6354.txt /vendor/etc/firmware/
-
-# 蓝牙（hci_bcm 默认查找 /lib/firmware/brcm/）
-sudo mkdir -p /lib/firmware/brcm
-sudo cp BCM4354A2.hcd /lib/firmware/brcm/
+sudo mkdir -p /lib/firmware/rtlbt
+sudo cp rtl8822cs_fw /lib/firmware/rtlbt/
+sudo cp rtl8822cs_config /lib/firmware/rtlbt/
 ```
 
-文件位于 SDK：
+固件如系统里没有，需要从：
 
-```text
-external/rkwifibt/firmware/broadcom/all/WIFI_FIRMWARE/fw_bcm4354a1_ag.bin
-external/rkwifibt/firmware/broadcom/all/WIFI_FIRMWARE/nvram_ap6354.txt
-external/rkwifibt/firmware/broadcom/all/BT_FIRMWARE/BCM4354A2.hcd
+- 原厂 Android 镜像的 `/vendor/etc/firmware/` 或 `/system/etc/firmware/` 提取；
+- Realtek/瑞昱官方渠道获取；
+- 同型号其它开发板固件中复制。
+
+2. 编译 `rtk_hciattach`（SDK 源码在 `external/rkwifibt/realtek/rtk_hciattach/`，有 Makefile）：
+
+```bash
+cd external/rkwifibt/realtek/rtk_hciattach
+make CC=aarch64-linux-gnu-gcc   # 或直接在板子上 make
+sudo cp rtk_hciattach /usr/local/bin/
 ```
 
-如果走 upstream `brcmfmac` 路线，则改用 `/lib/firmware/brcm/brcmfmac4354-sdio.bin` + `brcmfmac4354-sdio.txt`，并调整 dts compatible；V1 优先沿用 SDK 的 cywdhd 路线，减少改动。
+3. 拷贝蓝牙串口驱动模块：
 
-### 3.4 音频用户态安装
+```bash
+sudo cp external/rkwifibt/realtek/bluetooth_uart_driver/hci_uart.ko /lib/modules/$(uname -r)/
+sudo depmod -a
+```
+
+4. 启动蓝牙（tty 名按板端确认结果替换）：
+
+```bash
+sudo modprobe bluetooth
+sudo insmod /lib/modules/$(uname -r)/hci_uart.ko
+sudo rtk_hciattach -n -s 115200 /dev/ttyS0 rtk_h5 &
+sudo hciconfig hci0 up
+```
+
+5. 用 BlueZ + PulseAudio（或 PipeWire）配置 A2DP sink，参考 SDK 的 `external/rkwifibt/bt_realtek_start`，但把 `/dev/ttyS4` 改成实际 tty。
+
+### 4.4 WiFi 验证
+
+```bash
+ip link set wlan0 up
+nmtui   # 或 wpa_supplicant + dhclient
+```
+
+若 `wlan0` 不出现，再查 `dmesg`、rfkill 和 dts 电源/复位 GPIO。
+
+### 4.5 音频用户态安装
 
 ```bash
 sudo apt update
@@ -127,7 +151,7 @@ sudo apt install -y alsa-utils bluez pulseaudio-module-bluetooth \
 
 CamillaDSP 使用官方 aarch64 预编译包或 `cargo install camilladsp`，安装到 `/usr/local/bin`，用 systemd 管理。
 
-### 3.5 音频链路验证
+### 4.6 音频链路验证
 
 1. `sudo modprobe snd-aloop`，跑仓库 `scripts/run_validation.sh`；
 2. 插入 USB 3 声道声卡，用 `configs/2.1.usb.yml` 验证 L/R/SUB；
@@ -135,15 +159,15 @@ CamillaDSP 使用官方 aarch64 预编译包或 `cargo install camilladsp`，安
 4. 蓝牙 A2DP sink 配对手机，把音频路由到 CamillaDSP 输入；
 5. 接 TPA3116 功放，逐通道验证物理声道。
 
-## 4. 风险与注意
+## 5. 风险与注意
 
 | 风险 | 说明 |
 | --- | --- |
-| rootfs 版本不确定 | `ubuntu_1604.img` 文件名可疑；16.04 已 EOL，若确认是 16.04，需要换成 20.04 镜像 |
-| WiFi 芯片型号不确定 | dts 默认 RTL8822CS；如果板子实际是 RTL8822CS，则不需要切 AP6354，直接验证即可 |
+| RTL8822CS 蓝牙固件缺失 | SDK 未携带 `rtl8822cs_fw` / `rtl8822cs_config`，需从 Android 镜像或 Realtek 获取 |
+| 蓝牙 tty 不确定 | dts 接 uart0，但 SDK 脚本默认 `/dev/ttyS4`，必须以板端 `ls /dev/ttyS*` 为准 |
 | 内核 4.4 较老 | 以厂商 BSP 为基线，不追上游；应用层不依赖内核版本 |
-| cywdhd 的 Android 路径 | 驱动默认找 `/vendor/etc/firmware`，Ubuntu 下需要手动建目录；如遇问题再评估 brcmfmac 路线 |
+| Ubuntu 20.04 的 PipeWire 版本较旧 | V1 可先用 PulseAudio；需要新版 PipeWire 时再评估 PPA/backports |
 
-## 5. 与项目里程碑的关系
+## 6. 与项目里程碑的关系
 
 本文件对应 `docs/roadmap.md` 的 M2（RK3399 平台接入）。完成后即可进入 M3（2.1 硬件与调音）。
